@@ -1,0 +1,44 @@
+name: Record Release downloads
+
+on:
+  schedule:
+    - cron: '0 22 * * *' # 07:00 JST the following day
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: release-download-history
+  cancel-in-progress: false
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test recording rules without network access
+        run: python -m unittest discover -s tests -v
+      - name: Read counters and update CSV
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python scripts/record_downloads.py
+      - name: Save history
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- data/download-history.csv
+          if git diff --cached --quiet; then
+            echo 'No changes'
+            exit 0
+          fi
+          git commit -m 'Record Release download history'
+          git pull --rebase origin main
+          git push origin HEAD:main
